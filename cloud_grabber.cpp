@@ -26,37 +26,8 @@ void printUsage (const char* progName);
 
 // ==== PCL f()'s ====
 int parseFlow(int argc, char** argv, bool &realsense);
-
-#define NONE
-#ifdef BOOST
-boost::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr);
-boost::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud);
-
-#else
-
-std::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud) {
-	// Open 3D viewer and add point cloud
-	std::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("librealsense Viewer"));
-	viewer->setBackgroundColor (0.251, 0.251, 0.251); // Floral white 1, 0.98, 0.94 | Misty Rose 1, 0.912, 0.9 | 
-	viewer->addPointCloud<pcl::PointXYZRGB> (cloud, "sample cloud");
-	viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
-	viewer->addCoordinateSystem (1.0);
-	viewer->initCameraParameters ();
-	return (viewer);
-}
-
-
-std::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr) {
-	std::shared_ptr<pcl::visualization::PCLVisualizer> v;
-	
-	if(realsense) {
-		v = rsVis(rs_cloud_ptr);
-	}
-	
-	return v;	
-}
-
-#endif
+std::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud);
+std::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr);
 
 // ==== RealSense f()'s ====
 int ctxInfo(rs::context *c);
@@ -69,8 +40,7 @@ int printTimeLoop(t_point &t0, t_point &t1, t_point &t2,int &frames, int totalfr
 int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr);
 
 // ==== Main ====
-int 
-main (int argc, char** argv)
+int main (int argc, char** argv) try
 {
 	// ==== Parse Command Line Arguments ====
 	// Check for help first
@@ -91,19 +61,9 @@ main (int argc, char** argv)
 	
 	// ==== Cloud Setup ====
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-
-	#ifdef BOOST
-	// ==== Viewer Setup ====
-	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
-	viewer = getViewer(realsense, rs_cloud_ptr);
-
-	#else
 	std::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
 	viewer = getViewer(realsense, rs_cloud_ptr);
 
-	#endif
-
-	
 	// ==== RealSense Stream Setup ====
 	logRS();
 	rs::context ctx;
@@ -152,6 +112,16 @@ main (int argc, char** argv)
 	}
 	viewer->close();
 	return EXIT_SUCCESS;
+}
+catch (const rs::error & e)
+{
+	std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+	return EXIT_FAILURE;
+}
+catch (const std::exception & e)
+{
+	std::cerr << e.what() << std::endl;
+	return EXIT_FAILURE;
 }
 
 // calculates time stats and prints them on the viewer
@@ -216,11 +186,16 @@ int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_pt
 	rs_cloud_ptr->is_dense = false;
 	rs_cloud_ptr->resize(dwh);
 	
+	// Iterate the data space
+	// First, iterate across columns
 	for(int dy=0; dy<dh; dy++) {
+	// Second, iterate across rows
 		for(int dx=0; dx<dw; dx++) {
 			uint i = dy * dw + dx;
 			uint16_t depth_value = depth_image[i];
-			if(depth_value == 0) continue;
+
+			if(depth_value == 0) 
+				continue;
 			
 			rs::float2 depth_pixel = {(float)dx, (float)dy};
 			float depth_in_meters = depth_value * scale;
@@ -229,7 +204,9 @@ int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_pt
 			rs::float3 color_point = depth_to_color.transform(depth_point); 
 			rs::float2 color_pixel = color_intrin.project(color_point); 
 			
-			const int cx = (int)std::round(color_pixel.x), cy = (int)std::round(color_pixel.y); 
+			const int cx = (int)std::round(color_pixel.x);
+			const int cy = (int)std::round(color_pixel.y); 
+
 			static const float nan = std::numeric_limits<float>::quiet_NaN();
 			
 			// Set up logic to remove bad points
@@ -297,18 +274,6 @@ int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_pt
 	return EXIT_SUCCESS;
 }
 
-#ifdef BOOST
-// If we have different view scenarios
-boost::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr) {
-	boost::shared_ptr<pcl::visualization::PCLVisualizer> v;
-	
-	if(realsense) {
-		v = rsVis(rs_cloud_ptr);
-	}
-	
-	return v;
-}
-#endif
 
 // set flow vars based on command line options given
 int parseFlow(int argc, char** argv, bool &realsense) {
@@ -337,20 +302,6 @@ printUsage (const char* progName)
             << "\n\n";
 }
 
-#ifdef BOOST
-// RealSense Viewer settings
-boost::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud)
-{
-  // Open 3D viewer and add point cloud
-  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("librealsense Viewer"));
-  viewer->setBackgroundColor (0.251, 0.251, 0.251); // Floral white 1, 0.98, 0.94 | Misty Rose 1, 0.912, 0.9 | 
-  viewer->addPointCloud<pcl::PointXYZRGB> (cloud, "sample cloud");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
-  viewer->addCoordinateSystem (1.0);
-  viewer->initCameraParameters ();
-  return (viewer);
-}
-#endif 
 
 // logging options, output to file, etc
 void logRS() {
@@ -366,6 +317,28 @@ int ctxInfo(rs::context *c) {
     return EXIT_SUCCESS;
 }
 
+// PCL f()'s
+std::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud) {
+	// Open 3D viewer and add point cloud
+	std::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("librealsense Viewer"));
+	viewer->setBackgroundColor (0.251, 0.251, 0.251); // Floral white 1, 0.98, 0.94 | Misty Rose 1, 0.912, 0.9 | 
+	viewer->addPointCloud<pcl::PointXYZRGB> (cloud, "sample cloud");
+	viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+	viewer->addCoordinateSystem (1.0);
+	viewer->initCameraParameters ();
+	return (viewer);
+}
+
+
+std::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr) {
+	std::shared_ptr<pcl::visualization::PCLVisualizer> v;
+	
+	if(realsense) {
+		v = rsVis(rs_cloud_ptr);
+	}
+	
+	return v;	
+}
 // stream config & enabling for device
 int configStreams(rs::device *dev) {
 	//printf("\nUsing device 0, an %s\n    Serial number: %s\n    Firmware version: %s\n", dev->get_name(), dev->get_serial(), dev->get_firmware_version());
