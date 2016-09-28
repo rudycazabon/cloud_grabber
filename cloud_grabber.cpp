@@ -1,5 +1,3 @@
-#include <iostream>
-#include <boost/thread/thread.hpp>
 #include <pcl/common/common_headers.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/io/pcd_io.h>
@@ -11,7 +9,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <iostream>
 #include <chrono>
+#include <thread>
+#include <memory>
 
 #define NOISY 3.5			// Remove points past NOISY meters 
 #define FPS_MILLI 500		// Update fps every 0.5 seconds
@@ -25,8 +26,37 @@ void printUsage (const char* progName);
 
 // ==== PCL f()'s ====
 int parseFlow(int argc, char** argv, bool &realsense);
+
+#define NONE
+#ifdef BOOST
 boost::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr);
 boost::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud);
+
+#else
+
+std::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud) {
+	// Open 3D viewer and add point cloud
+	std::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("librealsense Viewer"));
+	viewer->setBackgroundColor (0.251, 0.251, 0.251); // Floral white 1, 0.98, 0.94 | Misty Rose 1, 0.912, 0.9 | 
+	viewer->addPointCloud<pcl::PointXYZRGB> (cloud, "sample cloud");
+	viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+	viewer->addCoordinateSystem (1.0);
+	viewer->initCameraParameters ();
+	return (viewer);
+}
+
+
+std::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr) {
+	std::shared_ptr<pcl::visualization::PCLVisualizer> v;
+	
+	if(realsense) {
+		v = rsVis(rs_cloud_ptr);
+	}
+	
+	return v;	
+}
+
+#endif
 
 // ==== RealSense f()'s ====
 int ctxInfo(rs::context *c);
@@ -35,7 +65,7 @@ int configStreams(rs::device *dev);
 
 // ==== Looping f()'s
 t_point myClock();
-int printTimeLoop(t_point &t0, t_point &t1, t_point &t2,int &frames, int totalframes, double &fps, double &totalfps, boost::shared_ptr<pcl::visualization::PCLVisualizer> v);
+int printTimeLoop(t_point &t0, t_point &t1, t_point &t2,int &frames, int totalframes, double &fps, double &totalfps, std::shared_ptr<pcl::visualization::PCLVisualizer> v);
 int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr);
 
 // ==== Main ====
@@ -61,9 +91,18 @@ main (int argc, char** argv)
 	
 	// ==== Cloud Setup ====
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	#ifdef BOOST
 	// ==== Viewer Setup ====
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
 	viewer = getViewer(realsense, rs_cloud_ptr);
+
+	#else
+	std::shared_ptr<pcl::visualization::PCLVisualizer> viewer;
+	viewer = getViewer(realsense, rs_cloud_ptr);
+
+	#endif
+
 	
 	// ==== RealSense Stream Setup ====
 	logRS();
@@ -84,7 +123,7 @@ main (int argc, char** argv)
 	t1 = t2 = t0;
 	
 	// ==== Viewer Loop ====
-	int waitSpin = 0, waitBoost = 0; // REMOVE - Set these from cmd line eventually
+	int waitSpin = 0, waitBoost = 1; // REMOVE - Set these from cmd line eventually
 	while (!viewer->wasStopped ())
 	{
 		// ==== Timing ====
@@ -116,7 +155,7 @@ main (int argc, char** argv)
 }
 
 // calculates time stats and prints them on the viewer
-int printTimeLoop(t_point &t0, t_point &t1, t_point &t2, int &frames, int totalframes, double &fps, double &totalfps, boost::shared_ptr<pcl::visualization::PCLVisualizer> v) {
+int printTimeLoop(t_point &t0, t_point &t1, t_point &t2, int &frames, int totalframes, double &fps, double &totalfps, std::shared_ptr<pcl::visualization::PCLVisualizer> v) {
 	t_milli zero_ms{0};
 	t_diff fp_ms, overall;
 	fp_ms = overall = zero_ms;
@@ -258,6 +297,7 @@ int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr rs_cloud_pt
 	return EXIT_SUCCESS;
 }
 
+#ifdef BOOST
 // If we have different view scenarios
 boost::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr rs_cloud_ptr) {
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> v;
@@ -268,6 +308,7 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> getViewer(bool realsense, p
 	
 	return v;
 }
+#endif
 
 // set flow vars based on command line options given
 int parseFlow(int argc, char** argv, bool &realsense) {
@@ -296,6 +337,7 @@ printUsage (const char* progName)
             << "\n\n";
 }
 
+#ifdef BOOST
 // RealSense Viewer settings
 boost::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud)
 {
@@ -308,6 +350,7 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> rsVis (pcl::PointCloud<pcl:
   viewer->initCameraParameters ();
   return (viewer);
 }
+#endif 
 
 // logging options, output to file, etc
 void logRS() {
