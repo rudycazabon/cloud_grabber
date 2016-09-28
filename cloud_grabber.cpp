@@ -39,6 +39,9 @@ t_point myClock();
 int printTimeLoop(t_point &t0, t_point &t1, t_point &t2,int &frames, int totalframes, double &fps, double &totalfps, std::shared_ptr<pcl::visualization::PCLVisualizer> v);
 int getFrame(rs::device *dev, pcl::PointCloud<pcl::PointXYZRGB>::Ptr);
 
+// ********************************************************************************
+// ********************************************************************************
+// ********************************************************************************
 // ==== Main ====
 int main (int argc, char** argv) try
 {
@@ -123,6 +126,9 @@ catch (const std::exception & e)
 	std::cerr << e.what() << std::endl;
 	return EXIT_FAILURE;
 }
+// ********************************************************************************
+// ********************************************************************************
+// ********************************************************************************
 
 // calculates time stats and prints them on the viewer
 int printTimeLoop(t_point &t0, t_point &t1, t_point &t2, int &frames, int totalframes, double &fps, double &totalfps, std::shared_ptr<pcl::visualization::PCLVisualizer> v) {
